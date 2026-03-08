@@ -4,7 +4,7 @@ import { getCodeAssistantBuilder } from "./agents/code-assistant.js";
 import { getModuleExtractorBuilder } from "./agents/module-extractor.js";
 
 const ollama = new OllamaClient("http://localhost:11434", 0.7, 800)
-const ollamaShortLow = new OllamaClient("http://localhost:11434", 0.2, 20)
+const ollamaShortLow = new OllamaClient("http://localhost:11434", 0.2, 40)
 
 function constructPrompt(system, user) {
     return `${system}
@@ -44,13 +44,16 @@ function withClient(client) {
 async function promptUntilNotEmpty(promiseCallback) {
     let response = "";
     let tries = 0;
-    while (response === "") {
+    while (response === "" && tries < 10) {
         tries++;
         try {
             response = await promiseCallback();
         } catch (timeout) {
             //ignore
         }
+    }
+    if (tries === 10) {
+        console.log("gave up after 10 tries");
     }
     return {
         response: response,
@@ -73,7 +76,7 @@ async function run() {
 
     const res2 = await promptUntilNotEmpty(() => moduleExtractor.chatWithTimeout(
         response,
-        5000
+        10000
     ));
     let response2 = res2.response;
     console.log("with tries: " + res2.tries);
