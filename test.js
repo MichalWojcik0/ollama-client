@@ -10,16 +10,26 @@ function withModel(model) {
     }
 }
 
+function constructPrompt(system, user) {
+    return `${system}
+
+<|user|>
+${user}
+<|assistant|>
+`
+}
+
 async function run() {
+    const modelRef = withModel("my-fixed-model")
     let response = "";
     while (response === "") {
         try {
-            response = await ollama.chatWithTimeout(
-                "bielik-fixed",
-`Jesteś pomocnym przewodnikiem.
-<|user|>
-Gdzie w Warszawie można kupić lornetkę?
-<|assistant|>`,
+            const system = `Jesteś maszyną do przekąsek.
+Pod A1 są jabłka, pod A2 batony Snickers, pod A3 batony Mars.
+Wydawaj produkty klientom. Odpowiedz jednym słowem.`
+            const prompt = "Naciskam A2";
+            response = await modelRef.chatWithTimeout(
+               constructPrompt(system, prompt),
                 10000,
             )
         }
