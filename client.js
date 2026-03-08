@@ -6,6 +6,13 @@ export class OllamaClient {
         this.num_predict = num_predict;
     }
 
+    withTemperature(temperature) {
+        this.temperature = temperature;
+    }
+    withTokenCount(num_predict) {
+        this.num_predict = num_predict;
+    }
+
     async chat(model, message) {
         const res = await fetch(`${this.baseUrl}/api/chat`, {
             method: "POST",
