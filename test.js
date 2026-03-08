@@ -66,12 +66,12 @@ async function run() {
     const codeprompt = fc + "\n" +
         "Jakiej biblioteki można użyć aby przeczytać plik .pdf?"
     console.log(codeprompt);
-    const res = promptUntilNotEmpty(() => codeAssistant.chatWithTimeout(codeprompt, 10000));
+    const res = await promptUntilNotEmpty(() => codeAssistant.chatWithTimeout(codeprompt, 10000));
     const response = res.response;
     console.log("with tries: " + res.tries);
     console.log("1. " + response);
 
-    const res2 = promptUntilNotEmpty(() => moduleExtractor.chatWithTimeout(
+    const res2 = await promptUntilNotEmpty(() => moduleExtractor.chatWithTimeout(
         response,
         5000
     ));
