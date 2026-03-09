@@ -1,7 +1,7 @@
 import { PromptSenderBuilder } from "../data_model/prompt-sender.js";
 import { OllamaClient } from "../client.js";
 
-    const infoExtractorSystem = `Zwróć tylko JSON.
+export const infoExtractorSystem = `Zwróć tylko JSON.
 Jesteś klasyfikatorem,
 który analizuje dokumenty i pozyskuje z nich kluczowe informacje. 
 Dysponujesz listą informacji potrzebnych do pozyskania z dokumentu.

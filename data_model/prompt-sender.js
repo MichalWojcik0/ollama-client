@@ -1,3 +1,4 @@
+import { OllamaClient } from "../client.js";
 
 function constructPrompt(system, user) {
     return `${system}
@@ -17,7 +18,10 @@ export class PromptSender {
 }
 
 export class PromptSenderBuilder {
-
+    /**
+     * @type {OllamaClient}
+     */
+    client
     /**
      * @param {OllamaClient} client
      */
@@ -39,9 +43,9 @@ export class PromptSenderBuilder {
      */
     build() {
         return {
-            chatWithTimeout: async (prompt) => {
+            chatWithTimeout: async (prompt, timeout) => {
                 const completePrompt = constructPrompt(this.system, prompt);
-                return await this.client.chatWithTimeout(this.model, completePrompt);
+                return await this.client.chatWithTimeout(this.model, completePrompt, timeout);
             }
         }
     }

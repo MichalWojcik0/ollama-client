@@ -3,7 +3,7 @@ import { getCodeAssistantBuilder } from "./agents/code-assistant.js";
 import { getModuleExtractorBuilder } from "./agents/module-extractor.js";
 import { BIELIK_1_5B, BIELIK_7B, BIELIK_7B_Q4 } from "./model-identifiers.js";
 import { getTagExtractorBuilder } from "./agents/tag-extractor.js";
-import { getInformationExtractorBuilder } from "./agents/information-extractor.js";
+import { getInformationExtractorBuilder, infoExtractorSystem } from "./agents/information-extractor.js";
 
 async function promptUntilNotEmpty(promiseCallback) {
     let response = "";
@@ -48,6 +48,10 @@ async function createRawPrompt(...args) {
             case "docx": {
                 const cnt = await readDocx(arg.value);
                 res += "\n" + cnt + "\n";
+            }
+            case "system": {
+                const cnt = arg.value;
+                res += "\n<|system|>\n" + cnt + "\n";
             }
                 break;
         }
@@ -97,7 +101,8 @@ async function extractTagsFromFile(
     console.log(tmsg + " : " + tags);
     const tagArg = { type: "text", value: tags };
     const fileArg2 = { type: "docx", value: pathToNote };
-    const rawPrompt2 = await createRawPrompt(tagArg, fileArg2);
+    const sytemRepeat = { type: "system", value: infoExtractorSystem };
+    const rawPrompt2 = await createRawPrompt(tagArg, fileArg2, sytemRepeat);
     const res2 = await promptUntilNotEmpty(() => infoExtractor.chatWithTimeout(rawPrompt2, 20000));
     printResponse(res2);
 }
@@ -108,9 +113,9 @@ async function run() {
     console.log(args);
     console.log(args[2]);
     const codeAssistant = getCodeAssistantBuilder(0.7, 400, BIELIK_7B).build();
-    const moduleExtractor = getModuleExtractorBuilder(0.2, 40, BIELIK_7B).build();
-    const tagExtractor = getTagExtractorBuilder(0.4, 100, BIELIK_7B_Q4).build();
-    const infoExtractor = getInformationExtractorBuilder(0.2, 2000, BIELIK_7B).build();
+    const moduleExtractor = getModuleExtractorBuilder(0.2, 40, BIELIK_7B_Q4).build();
+    const tagExtractor = getTagExtractorBuilder(0.2, 100, BIELIK_7B_Q4).build();
+    const infoExtractor = getInformationExtractorBuilder(0.2, 1000, BIELIK_7B).build();
     if (args.length > 4 && args[2] === "tags") {
         const pathToTemplate = args[3];
         const pathToNotes = args[4];
