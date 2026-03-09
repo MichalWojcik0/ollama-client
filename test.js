@@ -1,7 +1,7 @@
 import { readDocx, readFile } from "./read-file.js";
 import { getCodeAssistantBuilder } from "./agents/code-assistant.js";
 import { getModuleExtractorBuilder } from "./agents/module-extractor.js";
-import { BIELIK_1_5B, BIELIK_7B } from "./model-identifiers.js";
+import { BIELIK_1_5B, BIELIK_7B, BIELIK_7B_Q4 } from "./model-identifiers.js";
 import { getTagExtractorBuilder } from "./agents/tag-extractor.js";
 import { getInformationExtractorBuilder } from "./agents/information-extractor.js";
 
@@ -16,7 +16,7 @@ async function promptUntilNotEmpty(promiseCallback) {
             //ignore
         }
     }
-    if (tries === 10) {
+    if (tries === 20) {
         console.log("gave up after 10 tries");
     }
     return {
@@ -66,7 +66,7 @@ async function getCodeContinuationThenExtractModule(codeAssistant, moduleExtract
 
     const res2 = await promptUntilNotEmpty(() => moduleExtractor.chatWithTimeout(
         response,
-        10000
+        100000
     ));
     let response2 = res2.response;
     printResponse(res2);
@@ -83,8 +83,18 @@ async function extractTagsFromFile(
     console.log("rprompt: " + rawPrompt);
     const res = await promptUntilNotEmpty(() => tagExtractor.chatWithTimeout(rawPrompt, 10000));
     printResponse(res);
-    const tags = res.response;
-
+    let tags = res.response;
+    tags = tags.replaceAll("{{", "\"").replaceAll("}}", "\"");
+    tags = tags.split("\n").join(" : \"\",\n") + ": \"\"";
+    tags = "{\n  \"informacje\": {\n" + tags + "\n}\n}";
+    let isJSON = true;
+    try {
+        const js = JSON.parse(tags);
+    } catch (SyntaxError) {
+        isJSON = false;
+    }
+    const tmsg = isJSON ? "valid JSON" : "invalid JSON";
+    console.log(tmsg + " : " + tags);
     const tagArg = { type: "text", value: tags };
     const fileArg2 = { type: "docx", value: pathToNote };
     const rawPrompt2 = await createRawPrompt(tagArg, fileArg2);
@@ -97,10 +107,10 @@ async function run() {
     console.log("args");
     console.log(args);
     console.log(args[2]);
-    const codeAssistant = getCodeAssistantBuilder(1.0, 400, BIELIK_7B).build();
+    const codeAssistant = getCodeAssistantBuilder(0.7, 400, BIELIK_7B).build();
     const moduleExtractor = getModuleExtractorBuilder(0.2, 40, BIELIK_7B).build();
-    const tagExtractor = getTagExtractorBuilder(0.2, 200, BIELIK_7B).build();
-    const infoExtractor = getInformationExtractorBuilder(0.4, 1000, BIELIK_7B).build();
+    const tagExtractor = getTagExtractorBuilder(0.4, 100, BIELIK_7B_Q4).build();
+    const infoExtractor = getInformationExtractorBuilder(0.2, 2000, BIELIK_7B).build();
     if (args.length > 4 && args[2] === "tags") {
         const pathToTemplate = args[3];
         const pathToNotes = args[4];

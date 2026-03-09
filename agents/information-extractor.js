@@ -5,6 +5,7 @@ import { OllamaClient } from "../client.js";
 Jesteś klasyfikatorem,
 który analizuje dokumenty i pozyskuje z nich kluczowe informacje. 
 Dysponujesz listą informacji potrzebnych do pozyskania z dokumentu.
+Tagi, które otrzymasz są tylko i wyłącznie po polsku.
 Zwróć JSON przypisujący informację do danego tagu.`
 
 /**

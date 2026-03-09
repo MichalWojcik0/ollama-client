@@ -1,8 +1,10 @@
 {
   "dependencies": {
     "docx": "^9.6.0",
+    "docxtemplater": "^3.68.3",
     "mammoth": "^1.11.0",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "pizzip": "^3.2.0"
   },
   "type": "module"
 }
