@@ -1,29 +1,10 @@
-import { readDocx, readFile } from "./read-file.js";
-import { getCodeAssistantBuilder } from "./agents/code-assistant.js";
-import { getModuleExtractorBuilder } from "./agents/module-extractor.js";
+import { createRawPrompt, promptUntilNotEmpty } from "./prompt-utils.js";
 import { BIELIK_1_5B, BIELIK_7B, BIELIK_7B_Q4 } from "./model-identifiers.js";
 import { getTagExtractorBuilder } from "./agents/tag-extractor.js";
 import { getInformationExtractorBuilder, infoExtractorSystem } from "./agents/information-extractor.js";
 
-async function promptUntilNotEmpty(promiseCallback) {
-    let response = "";
-    let tries = 0;
-    while (response === "" && tries < 10) {
-        tries++;
-        try {
-            response = await promiseCallback();
-        } catch (timeout) {
-            //ignore
-        }
-    }
-    if (tries === 20) {
-        console.log("gave up after 10 tries");
-    }
-    return {
-        response: response,
-        tries: tries,
-    };
-}
+const tagExtractor = getTagExtractorBuilder(0.2, 100, BIELIK_7B_Q4).build();
+const infoExtractor = getInformationExtractorBuilder(0.2, 1000, BIELIK_7B).build();
 
 let id = 1;
 function printResponse(res) {
@@ -32,53 +13,23 @@ function printResponse(res) {
     id++;
 }
 
-async function createRawPrompt(...args) {
-    let res = "";
-    for (const arg of args) {
-        const type = arg.type;
-        switch (type) {
-            case "text":
-                res += "\n" + arg.value + "\n";
-                break;
-            case "file": {
-                const cnt = readFile(arg.value);
-                res += "\n" + cnt + "\n";
-            }
-                break;
-            case "docx": {
-                const cnt = await readDocx(arg.value);
-                res += "\n" + cnt + "\n";
-            }
-            case "system": {
-                const cnt = arg.value;
-                res += "\n<|system|>\n" + cnt + "\n";
-            }
-                break;
-        }
-    }
-    return res;
+/**
+ * @param {string} tagList 
+ */
+function tagListToJson(tagList) {
+    tagList = tagList.replaceAll("}}{{", "}}\n{{");
+    tagList = tagList.replaceAll("{{", "\"").replaceAll("}}", "\"");
+    tagList = tagList.split("\n").join(" : \"\",\n") + ": \"\"";
+    tagList = "{\n  \"informacje\": {\n" + tagList + "\n}\n}";
+    return tagList;
 }
 
-async function getCodeContinuationThenExtractModule(codeAssistant, moduleExtractor, file, question) {
-    const fileArg = { type: "file", value: file };
-    const query = { type: "text", value: question };
-    const rawPrompt = createRawPrompt(fileArg, query);
-    console.log(rawPrompt);
-    const res = await promptUntilNotEmpty(() => codeAssistant.chatWithTimeout(rawPrompt, 10000));
-    const response = res.response;
-    printResponse(res);
-
-    const res2 = await promptUntilNotEmpty(() => moduleExtractor.chatWithTimeout(
-        response,
-        100000
-    ));
-    let response2 = res2.response;
-    printResponse(res2);
+function formQuestion(tag) {
+    return "Zadanie:\n" +
+    "Znajdź " + tag + " w powyższym tekście";
 }
 
 async function extractTagsFromFile(
-    tagExtractor,
-    infoExtractor,
     pathToTemplate,
     pathToNote
 ) {
@@ -88,23 +39,32 @@ async function extractTagsFromFile(
     const res = await promptUntilNotEmpty(() => tagExtractor.chatWithTimeout(rawPrompt, 10000));
     printResponse(res);
     let tags = res.response;
-    tags = tags.replaceAll("{{", "\"").replaceAll("}}", "\"");
-    tags = tags.split("\n").join(" : \"\",\n") + ": \"\"";
-    tags = "{\n  \"informacje\": {\n" + tags + "\n}\n}";
+    const jsonForm = tagListToJson(tags);
     let isJSON = true;
     try {
-        const js = JSON.parse(tags);
+        const js = JSON.parse(jsonForm);
+        const keys = Object.keys(js.informacje);
+        console.log("keys: " + keys);
+        for(const key of keys) {
+            const fileArg2 = { type: "docx", value: pathToNote };
+            const sytemRepeat = { type: "system", value: infoExtractorSystem };
+            const question = { type: "text", value: formQuestion(key) };
+            const questionPrompt = await createRawPrompt(fileArg2, sytemRepeat, question);
+            const answer = await promptUntilNotEmpty(() => infoExtractor.chatWithTimeout(questionPrompt, 10000));
+            printResponse(answer);
+            console.log("concrete pair: " + key + " - " + answer.response);
+        }
     } catch (SyntaxError) {
         isJSON = false;
     }
     const tmsg = isJSON ? "valid JSON" : "invalid JSON";
     console.log(tmsg + " : " + tags);
-    const tagArg = { type: "text", value: tags };
-    const fileArg2 = { type: "docx", value: pathToNote };
-    const sytemRepeat = { type: "system", value: infoExtractorSystem };
-    const rawPrompt2 = await createRawPrompt(tagArg, fileArg2, sytemRepeat);
-    const res2 = await promptUntilNotEmpty(() => infoExtractor.chatWithTimeout(rawPrompt2, 20000));
-    printResponse(res2);
+    // const tagArg = { type: "text", value: tags };
+    // const fileArg2 = { type: "docx", value: pathToNote };
+    // const sytemRepeat = { type: "system", value: infoExtractorSystem };
+    // const rawPrompt2 = await createRawPrompt(tagArg, fileArg2, sytemRepeat);
+    // const res2 = await promptUntilNotEmpty(() => infoExtractor.chatWithTimeout(rawPrompt2, 20000));
+    // printResponse(res2);
 }
 
 async function run() {
@@ -112,23 +72,10 @@ async function run() {
     console.log("args");
     console.log(args);
     console.log(args[2]);
-    const codeAssistant = getCodeAssistantBuilder(0.7, 400, BIELIK_7B).build();
-    const moduleExtractor = getModuleExtractorBuilder(0.2, 40, BIELIK_7B_Q4).build();
-    const tagExtractor = getTagExtractorBuilder(0.2, 100, BIELIK_7B_Q4).build();
-    const infoExtractor = getInformationExtractorBuilder(0.2, 1000, BIELIK_7B).build();
     if (args.length > 4 && args[2] === "tags") {
         const pathToTemplate = args[3];
         const pathToNotes = args[4];
-        extractTagsFromFile(tagExtractor, infoExtractor, pathToTemplate, pathToNotes);
-    } else {
-        const file = "./read-file.js";
-        const question = "Jakiej biblioteki można użyć aby przeczytać plik .pdf?";
-        await getCodeContinuationThenExtractModule(
-            codeAssistant,
-            moduleExtractor,
-            file,
-            question
-        );
+        extractTagsFromFile(pathToTemplate, pathToNotes);
     }
 }
 
