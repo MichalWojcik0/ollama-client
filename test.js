@@ -1,7 +1,9 @@
-import { readFile } from "./read-file.js";
+import { readDocx, readFile } from "./read-file.js";
 import { getCodeAssistantBuilder } from "./agents/code-assistant.js";
 import { getModuleExtractorBuilder } from "./agents/module-extractor.js";
 import { BIELIK_1_5B, BIELIK_7B } from "./model-identifiers.js";
+import { getTagExtractorBuilder } from "./agents/tag-extractor.js";
+import { getInformationExtractorBuilder } from "./agents/information-extractor.js";
 
 async function promptUntilNotEmpty(promiseCallback) {
     let response = "";
@@ -23,35 +25,41 @@ async function promptUntilNotEmpty(promiseCallback) {
     };
 }
 
-function printResponse(res, num) {
+let id = 1;
+function printResponse(res) {
     console.log("with tries: " + res.tries);
-    console.log(num + ": " + res.response);
+    console.log(id + ": " + res.response);
+    id++;
 }
 
-function createRawPrompt(...args) {
+async function createRawPrompt(...args) {
     let res = "";
-    for(const arg of args) {
+    for (const arg of args) {
         const type = arg.type;
         switch (type) {
             case "text":
                 res += "\n" + arg.value + "\n";
                 break;
-            case "file":
+            case "file": {
                 const cnt = readFile(arg.value);
                 res += "\n" + cnt + "\n";
+            }
+                break;
+            case "docx": {
+                const cnt = await readDocx(arg.value);
+                res += "\n" + cnt + "\n";
+            }
                 break;
         }
     }
     return res;
 }
 
-async function run() {
-    const codeAssistant = getCodeAssistantBuilder(1.0, 400, BIELIK_7B).build();
-    const moduleExtractor = getModuleExtractorBuilder(0.2, 40, BIELIK_7B).build();
-    const fileArg = { type: "file", value: "./read-file.js"};
-    const query = { type: "text", value: "Jakiej biblioteki można użyć aby przeczytać plik .pdf?" };
+async function getCodeContinuationThenExtractModule(codeAssistant, moduleExtractor, file, question) {
+    const fileArg = { type: "file", value: file };
+    const query = { type: "text", value: question };
     const rawPrompt = createRawPrompt(fileArg, query);
-    console.log(codeprompt);
+    console.log(rawPrompt);
     const res = await promptUntilNotEmpty(() => codeAssistant.chatWithTimeout(rawPrompt, 10000));
     const response = res.response;
     printResponse(res);
@@ -62,6 +70,51 @@ async function run() {
     ));
     let response2 = res2.response;
     printResponse(res2);
+}
+
+async function extractTagsFromFile(
+    tagExtractor,
+    infoExtractor,
+    pathToTemplate,
+    pathToNote
+) {
+    const fileArg = { type: "docx", value: pathToTemplate };
+    const rawPrompt = await createRawPrompt(fileArg);
+    console.log("rprompt: " + rawPrompt);
+    const res = await promptUntilNotEmpty(() => tagExtractor.chatWithTimeout(rawPrompt, 10000));
+    printResponse(res);
+    const tags = res.response;
+
+    const tagArg = { type: "text", value: tags };
+    const fileArg2 = { type: "docx", value: pathToNote };
+    const rawPrompt2 = await createRawPrompt(tagArg, fileArg2);
+    const res2 = await promptUntilNotEmpty(() => infoExtractor.chatWithTimeout(rawPrompt2, 20000));
+    printResponse(res2);
+}
+
+async function run() {
+    const args = process.argv;
+    console.log("args");
+    console.log(args);
+    console.log(args[2]);
+    const codeAssistant = getCodeAssistantBuilder(1.0, 400, BIELIK_7B).build();
+    const moduleExtractor = getModuleExtractorBuilder(0.2, 40, BIELIK_7B).build();
+    const tagExtractor = getTagExtractorBuilder(0.2, 200, BIELIK_7B).build();
+    const infoExtractor = getInformationExtractorBuilder(0.4, 1000, BIELIK_7B).build();
+    if (args.length > 4 && args[2] === "tags") {
+        const pathToTemplate = args[3];
+        const pathToNotes = args[4];
+        extractTagsFromFile(tagExtractor, infoExtractor, pathToTemplate, pathToNotes);
+    } else {
+        const file = "./read-file.js";
+        const question = "Jakiej biblioteki można użyć aby przeczytać plik .pdf?";
+        await getCodeContinuationThenExtractModule(
+            codeAssistant,
+            moduleExtractor,
+            file,
+            question
+        );
+    }
 }
 
 run();
